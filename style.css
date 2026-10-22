@@ -199,3 +199,13 @@ mark{background:#FFE58A;color:#000}
   .decl .say{font-size:1.28rem}
 }
 @media print{.topbar,.dock,.navrow,.rowbtns{display:none!important}}
+
+.decl .say{white-space:pre-line}
+.banner{background:var(--navy,#0B1F4B);color:#fff;border-radius:14px;padding:14px 16px;margin:10px 0 12px;text-align:center;border-bottom:4px solid var(--gold,#C9A227)}
+.banner div{font-weight:800;letter-spacing:.06em;line-height:1.35}
+.banner .b0{font-size:.72rem;color:var(--gold-light,#E8C766);letter-spacing:.16em}
+.banner .b1{font-size:1rem;margin:6px 0;color:#FFD6CC}
+.banner .b2{font-family:var(--serif);font-size:1.15rem;letter-spacing:.02em}
+.banner .b3{font-size:.8rem;color:var(--gold-light,#E8C766);margin-top:4px}
+.banner .b4{font-family:var(--serif);font-size:1.05rem;margin-top:8px;color:#fff}
+.bigthanks{font-family:var(--serif);font-size:1.5rem;font-weight:700;text-align:center;letter-spacing:.02em}

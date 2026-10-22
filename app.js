@@ -60,8 +60,9 @@ document.addEventListener("input",function(e){
 });
 
 /* ---------- build guided slides ---------- */
-var declCount = D.declarations.length;
-D.declarations.forEach(function(d,i){ d.i=i+1; });
+var declCount = 0, earthCount = 0, totalDecls = D.declarations.length;
+D.declarations.forEach(function(d){ if(d.g==="earth"){ d.i=++earthCount; } else { d.i=++declCount; } });
+function dLabel(d){ return d.g==="earth" ? "Direction Declaration "+d.i+" of "+earthCount : "Declaration "+d.i+" of "+declCount; }
 var slides = [];
 D.steps.forEach(function(st,si){
   slides.push({type:"step", step:st, si:si});
@@ -82,7 +83,7 @@ function sentences(text){
   if(buf.trim()) out.push(buf.trim());
   return out;
 }
-function q(text, pauseAfter, label){ var c=sentences(clean(text)); return c.map(function(s,i){ return {t:s, p:(i===c.length-1?(pauseAfter||0):0), label:label||""}; }); }
+function q(text, pauseAfter, label){ var c=sentences(clean(String(text).replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F3FB}-\u{1F3FF}]/gu,""))); return c.map(function(s,i){ return {t:s, p:(i===c.length-1?(pauseAfter||0):0), label:label||""}; }); }
 function repeatPause(text){ var w = clean(text).split(" ").length; return Math.min(15000, Math.max(2500, w*430/settings.rate)); }
 function pickVoice(){
   if(!synth) return null; var vs = synth.getVoices()||[];
@@ -124,15 +125,17 @@ function stepQueue(st){
   Q=Q.concat(q(st.title+".",400,lab));
   if(st.kind==="direction") Q=Q.concat(q("Follow the original direction.",300,lab));
   if(st.lead) Q=Q.concat(q(st.lead,300,lab));
+  (st.seq||[]).forEach(function(x){ if(x.r) Q=Q.concat(q("Scripture. "+spokenRef(x.r)+". "+kjvPlain(x.r),500,x.r)); else Q=Q.concat(q(x.p,350,lab)); });
   (st.words||[]).forEach(function(w){ Q=Q.concat(q(w,350,lab)); });
   if(st.kind==="bondages") D.bondages.forEach(function(b,i){ Q=Q.concat(q((i+1)+". "+b.name+".",300,b.name)); Q=Q.concat(q(b.words,300,b.name)); (b.refs||[]).forEach(function(r){ Q=Q.concat(q(spokenRef(r)+". "+kjvPlain(r),400,r)); }); });
   (st.refs||[]).forEach(function(r){ Q=Q.concat(q("Scripture. "+spokenRef(r)+". "+kjvPlain(r),500,r)); });
   if(st.checklist){ Q=Q.concat(q("Here are the steps.",300,lab)); st.checklist.forEach(function(c,i){ Q=Q.concat(q("Step "+(i+1)+". "+c,500,lab)); }); }
   if(st.missing) Q=Q.concat(q(st.missing,300,lab));
+  if(st.next) Q=Q.concat(q(st.next,300,lab));
   return Q;
 }
 function declQueue(d){
-  var Q=[]; var lab="Declaration "+d.i+" of "+declCount;
+  var Q=[]; var lab=dLabel(d);
   var rep = settings.mode==="repeat";
   if(rep) Q=Q.concat(q("Repeat after me.",250,lab));
   Q=Q.concat(q(d.t, rep?repeatPause(d.t):600, lab));
@@ -184,9 +187,9 @@ function renderHome(){
     (resume>0 ? '<div class="resume-note">You stopped at part '+(resume+1)+' of '+slides.length+'. START continues from there. <button class="linkbtn" id="restartBtn">Start from the beginning</button></div>' : '<div class="resume-note">Press START. The prayer will read aloud and move on by itself.</div>')+
   '</div></section>'+
   '<section class="more"><div class="wrap"><h2>Study More</h2><div class="sub">Optional. The START button above is all you need.</div><div class="grid">'+
-    tile("decls","All "+declCount+" Declarations","Repeat after me, one at a time, with family name boxes")+
+    tile("decls","All "+totalDecls+" Declarations",declCount+" from the service + "+earthCount+" from the prophetic direction, with family name boxes")+
     tile("family","My Family Prayers","Type names once; Scripture prayers for your family")+
-    tile("direction","Prophetic Direction","The anointing-oil instruction and checklist")+
+    tile("direction","Prophetic Direction","Anointing oil: Earth! Earth!! Earth!!! with "+earthCount+" declarations")+
     tile("learn","Learn: 3 Levels","Beginner, Intermediate, Advanced")+
     tile("quiz","Bible Quiz","5, 7 or 10 questions")+
     tile("memory","Memory Cards","Hide, reveal and practice verses")+
@@ -216,25 +219,28 @@ function jumpToStep(id){ var i=slides.findIndex(function(s){return s.type==="ste
 function unlockSpeech(){ if(!synth) return; try{ var u=new SpeechSynthesisUtterance(" "); u.volume=0; synth.speak(u); }catch(e){} }
 
 function cueHTML(tag){
-  var cls = /REPEAT|DECLARE/.test(tag)?"repeat":/READ/.test(tag)?"read":/PRAY/.test(tag)?"pray":/DIRECTION/.test(tag)?"direct":/THANK/.test(tag)?"thanks":"listen";
+  var cls = /REPEAT|DECLARE|^SAY$/.test(tag)?"repeat":/READ/.test(tag)?"read":/PRAY/.test(tag)?"pray":/DIRECTION/.test(tag)?"direct":/THANK/.test(tag)?"thanks":"listen";
   var icon = {repeat:"🗣️",read:"📖",pray:"🙏🏽",direct:"📌",thanks:"🙌🏽",listen:"🔊"}[cls];
   return '<span class="cue '+cls+'">'+icon+' '+esc(tag)+'</span>';
 }
 function stepBodyHTML(st){
   var h="";
   if(st.lead) h+='<div class="kiki"><div class="lbl">Pastor Kiki</div><p>'+esc(st.lead)+'</p></div>';
+  if(st.banner) h+='<div class="banner">'+st.banner.map(function(b,i){ return '<div class="b'+i+'">'+esc(b)+'</div>'; }).join("")+'</div>';
+  if(st.seq){ h+='<div class="dir"><div class="lbl">'+esc(st.lbl||"Original direction")+'</div>'; st.seq.forEach(function(x){ h+= x.r ? scripHTML(x.r) : '<p>'+esc(x.p)+'</p>'; }); h+='</div>'; }
   if(st.words && st.words.length){
     var box = st.kind==="direction" ? "dir" : "kiki";
-    var lbl = st.kind==="direction" ? "Original direction · Pastor Kiki" : (st.kind==="pray"?"Pastor Kiki prays":"Pastor Kiki");
+    var lbl = st.lbl ? st.lbl : st.kind==="direction" ? "Original direction · Pastor Kiki" : (st.kind==="pray"?"Pastor Kiki prays":"Pastor Kiki");
     h+='<div class="'+box+'"><div class="lbl">'+lbl+'</div>'+st.words.map(function(w){return '<p>'+esc(w)+'</p>';}).join("")+'</div>';
   }
   if(st.kind==="bondages") h+=bondagesHTML();
   (st.refs||[]).forEach(function(r){ h+=scripHTML(r); });
   if(st.checklist){
     var ck=get("check",{});
-    h+='<div class="dir"><div class="lbl">Checklist — tick as you go</div><ul class="checklist">'+st.checklist.map(function(c,i){ return '<li><input type="checkbox" id="ck'+i+'" data-ck="'+i+'" '+(ck[i]?"checked":"")+'><label for="ck'+i+'">'+esc(c)+'</label></li>'; }).join("")+'</ul></div>';
+    h+='<div class="dir"><div class="lbl">Checklist — tick as you go</div><ul class="checklist">'+st.checklist.map(function(c,i){ var k=st.id+"-"+i; return '<li><input type="checkbox" id="ck-'+k+'" data-ck="'+k+'" '+(ck[k]?"checked":"")+'><label for="ck-'+k+'">'+esc(c)+'</label></li>'; }).join("")+'</ul></div>';
   }
   if(st.missing) h+='<div class="missing">📌 '+esc(st.missing)+'</div>';
+  if(st.next) h+='<div class="dir"><p>📌 '+esc(st.next)+'</p></div>';
   if(st.note) h+='<div class="note">Note: '+esc(st.note)+'</div>';
   return h;
 }
@@ -247,15 +253,15 @@ function wireAcc(){ main.querySelectorAll("[data-acc]>button").forEach(function(
 function wireChecks(){ main.querySelectorAll("[data-ck]").forEach(function(c){ c.onchange=function(){ var ck=get("check",{}); ck[c.getAttribute("data-ck")]=c.checked; set("check",ck); }; }); }
 
 function declCardHTML(d, showPos){
-  var h='<div class="decl"><div class="num">'+(showPos?'Declaration '+d.i+' of '+declCount:'Declaration '+d.i)+'</div>'+cueHTML(d.g==="salvation"?"REPEAT AFTER ME":"REPEAT AFTER ME")+
+  var h='<div class="decl"><div class="num">'+esc(dLabel(d))+'</div>'+cueHTML(d.g==="earth"?"SAY":"REPEAT AFTER ME")+
     '<div class="say">'+esc(d.t)+'</div>'+
     (d.ref?'<button class="pill" data-ref="'+esc(d.ref)+'">📖 '+esc(d.ref)+'</button><div class="refpop"></div>':'')+
     (d.note?'<div class="note">Note: '+esc(d.note)+'</div>':'')+
-    '<div class="src">Pastor Kiki Ocansey · as spoken in the service</div></div>';
+    '<div class="src">'+(d.g==="earth"?"L137 written prophetic direction (WhatsApp platform)":"Pastor Kiki Ocansey · as spoken in the service")+'</div></div>';
   if(d.f){
     h+='<div class="pers"><div class="lbl">🏠 For my family — type their names</div>'+namesBoxHTML()+
       '<div class="ptext" data-ptpl="'+esc(d.f)+'"></div>'+
-      '<div class="note">This family version is personalized from the declaration above. It is not Pastor Kiki’s original wording.</div></div>';
+      '<div class="note">This family version is personalized from the declaration above. It is not the original wording.</div></div>';
   }
   return h;
 }
@@ -277,7 +283,7 @@ function renderSlide(){
   } else if(s.type==="decl"){
     h+='<h2 class="title">'+esc(st.title)+'</h2>'+declCardHTML(s.d,true);
   } else {
-    h+='<div class="stephead">'+cueHTML(st.tag==="GIVE THANKS"?"GIVE THANKS":"PRAY")+'</div><h2 class="title">'+esc(st.title)+'</h2><div class="'+(st.kind==="direction"?"dir":"kiki")+'"><div class="lbl">Pastor Kiki</div><p>'+esc(st.after)+'</p></div>';
+    h+='<div class="stephead">'+cueHTML(st.afterTag||(st.tag==="GIVE THANKS"?"GIVE THANKS":"PRAY"))+'</div><h2 class="title">'+esc(st.title)+'</h2><div class="'+(st.kind==="direction"?"dir":"kiki")+'"><div class="lbl">'+esc(st.lbl||"Pastor Kiki")+'</div><p'+(st.afterTag?' class="bigthanks"':'')+'>'+esc(st.after)+'</p></div>';
   }
   if(state.slide===slides.length-1) h+='<div class="dir" style="text-align:center"><div class="lbl">Finished</div><p style="font-family:var(--serif);font-size:1.3rem">You have completed the guided prayer. Amen.</p><p>Remember your prophetic direction when you break your fast.</p></div>';
   h+='<div class="navrow"><button class="btn" id="prevBtn" '+(state.slide===0?"disabled":"")+'>← Back</button><button class="btn primary" id="nextBtn">'+(state.slide===slides.length-1?"Home":"Next →")+'</button></div>';
@@ -285,7 +291,7 @@ function renderSlide(){
   main.innerHTML=h; wireAcc(); wireChecks(); wireRefs(); wireNames(); refreshPersonal();
   $("#prevBtn").onclick=function(){ moveSlide(-1,false); };
   $("#nextBtn").onclick=function(){ if(state.slide===slides.length-1){ set("slide",0); go("home"); } else moveSlide(1,false); };
-  setNow(s.type==="decl" ? "Declaration "+s.d.i+" of "+declCount : st.title);
+  setNow(s.type==="decl" ? dLabel(s.d) : st.title);
 }
 function slideQueue(s){ return s.type==="step" ? stepQueue(s.step) : s.type==="decl" ? declQueue(s.d) : q(s.step.after,400,s.step.title); }
 function playCurrent(){
@@ -305,11 +311,11 @@ function moveSlide(d, autoplay){
 var dIdx = get("didx",0);
 function renderDecls(){
   var d = D.declarations[dIdx];
-  var group = {theme:"I Refuse to Remain Like This",navel:"Your Navel Was Not Cut",live:"In Thy Blood, Live",covenant:"A New Covenant",communion:"As I Drink the Blood of Jesus (Communion)",remain:"You Cannot Remain Like This",fire:"Fire Prayers from the Service",thanks:"Thanksgiving",salvation:"Prayer of Salvation"}[d.g];
-  var pct=Math.round((dIdx+1)/declCount*100);
+  var group = {earth:"Prophetic Direction: Earth! Earth!! Earth!!!",theme:"I Refuse to Remain Like This",navel:"Your Navel Was Not Cut",live:"In Thy Blood, Live",covenant:"A New Covenant",communion:"As I Drink the Blood of Jesus (Communion)",remain:"You Cannot Remain Like This",fire:"Fire Prayers from the Service",thanks:"Thanksgiving",salvation:"Prayer of Salvation"}[d.g];
+  if(dIdx>=totalDecls) dIdx=totalDecls-1; var pct=Math.round((dIdx+1)/totalDecls*100);
   main.innerHTML='<div class="screen"><div class="wrap"><div class="crumb">Declarations · '+esc(group)+'</div><div class="progress"><i style="width:'+pct+'%"></i></div>'+
-    '<h2 class="title">Declaration '+d.i+' of '+declCount+'</h2>'+declCardHTML(d,true)+
-    '<div class="navrow"><button class="btn" id="dPrev" '+(dIdx===0?"disabled":"")+'>← Previous</button><button class="btn primary" id="dNext" '+(dIdx===declCount-1?"disabled":"")+'>Next →</button></div>'+
+    '<h2 class="title">'+esc(dLabel(d))+'</h2><div class="counter">'+(dIdx+1)+' of '+totalDecls+' in this list</div>'+declCardHTML(d,true)+
+    '<div class="navrow"><button class="btn" id="dPrev" '+(dIdx===0?"disabled":"")+'>← Previous</button><button class="btn primary" id="dNext" '+(dIdx===totalDecls-1?"disabled":"")+'>Next →</button></div>'+
     '<div class="rowbtns" style="margin-top:14px"><button class="btn" id="dAll">▶ Play all from here</button><button class="btn" id="dHome">🏠 Main menu</button></div>'+
     '</div></div>';
   wireRefs(); wireNames(); refreshPersonal();
@@ -317,10 +323,10 @@ function renderDecls(){
   $("#dNext").onclick=function(){ stopAudio(true); dIdx++; set("didx",dIdx); renderDecls(); };
   $("#dHome").onclick=function(){ go("home"); };
   $("#dAll").onclick=function(){ playDeclFrom(); };
-  setNow("Declaration "+d.i+" of "+declCount);
+  setNow(dLabel(d));
 }
 function playDeclFrom(){
-  audioPlay(declQueue(D.declarations[dIdx]), function(){ if(settings.auto && dIdx<declCount-1){ dIdx++; set("didx",dIdx); renderDecls(); setTimeout(playDeclFrom,300); } });
+  audioPlay(declQueue(D.declarations[dIdx]), function(){ if(settings.auto && dIdx<totalDecls-1){ dIdx++; set("didx",dIdx); renderDecls(); setTimeout(playDeclFrom,300); } });
 }
 
 /* ---------- family prayers ---------- */
@@ -486,7 +492,7 @@ function wireDock(){
   $("#aFwd").onclick=function(){ seek(1); };
   $("#aRep").onclick=function(){ if(state.view==="guide") { stopAudio(true); playCurrent(); } else if(state.view==="decls"){ stopAudio(true); audioPlay(declQueue(D.declarations[dIdx])); } else if(A.queue.length){ var qq=A.queue; audioPlay(qq); } };
   $("#aPrev").onclick=function(){ if(state.view==="guide") moveSlide(-1,false); else if(state.view==="decls" && dIdx>0){ stopAudio(true); dIdx--; set("didx",dIdx); renderDecls(); } else if(state.view==="memory" && mIdx>0) $("#mPrev").click(); };
-  $("#aNext").onclick=function(){ if(state.view==="guide") moveSlide(1,false); else if(state.view==="decls" && dIdx<declCount-1){ stopAudio(true); dIdx++; set("didx",dIdx); renderDecls(); } else if(state.view==="memory" && mIdx<D.memory.length-1) $("#mNext").click(); };
+  $("#aNext").onclick=function(){ if(state.view==="guide") moveSlide(1,false); else if(state.view==="decls" && dIdx<totalDecls-1){ stopAudio(true); dIdx++; set("didx",dIdx); renderDecls(); } else if(state.view==="memory" && mIdx<D.memory.length-1) $("#mNext").click(); };
   var rate=$("#optRate"); rate.value=String(settings.rate); rate.onchange=function(){ settings.rate=parseFloat(rate.value); set("settings",settings); };
   var mode=$("#optMode"); function pm(){ mode.textContent = settings.mode==="repeat"?"Repeat after me":"Listen only"; mode.setAttribute("aria-pressed", settings.mode==="repeat"); } pm();
   mode.onclick=function(){ settings.mode = settings.mode==="repeat"?"listen":"repeat"; set("settings",settings); pm(); };
